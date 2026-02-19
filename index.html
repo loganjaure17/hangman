@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Hangman (Match Themed)</title>
+  <style>
+    :root{
+      --bg:#0f172a;
+      --panel:#111827;
+      --text:#e5e7eb;
+      --muted:#94a3b8;
+      --accent:#22c55e;
+      --danger:#ef4444;
+      --border:rgba(255,255,255,.10);
+    }
+    *{box-sizing:border-box}
+
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+
+      background:
+        /* subtle vertical fade to avoid hard seam */
+        linear-gradient(
+          to bottom,
+          rgba(15,23,42,0) 0%,
+          rgba(15,23,42,0.35) 65%,
+          rgba(15,23,42,0.55) 100%
+        ),
+        radial-gradient(
+          1200px 650px at 25% 0%,
+          #1f2937 0%,
+          var(--bg) 55%
+        );
+
+      color: var(--text);
+    }
+
+    .wrap{max-width:980px;margin:38px auto;padding:0 16px}
+    .top{
+      display:flex;
+      gap:16px;
+      align-items:flex-start;
+      flex-wrap:wrap;
+      margin-bottom:14px;
+    }
+    .panel{
+      background:rgba(17,24,39,.78);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:18px;
+      backdrop-filter: blur(8px);
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:16px;
+    }
+    @media (max-width: 860px){
+      .panel{grid-template-columns:1fr}
+    }
+    .card{
+      border:1px solid var(--border);
+      border-radius:14px;
+      padding:14px;
+      background:rgba(15,23,42,.45);
+    }
+
+    .panel{
+      position: relative;
+      overflow: hidden;
+    }
+    .panel::after{
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -1px;
+      height: 48px;
+
+      background: linear-gradient(
+        to bottom,
+        rgba(17,24,39,0) 0%,
+        rgba(15,23,42,0.45) 100%
+      );
+
+  pointer-events: none;
+}
+
+    .label{
+      font-size:12px;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      margin-bottom:6px;
+    }
+    .big{font-size:28px;font-weight:850}
+    .mono{font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace}
+    
+    #display{
+      letter-spacing: .18em;
+
+      /* ✅ never wrap to a second line */
+      white-space: nowrap;
+
+      /* ✅ allow scroll if it still doesn't fit */
+      overflow-x: auto;
+      overflow-y: hidden;
+
+      /* optional polish */
+      padding-bottom: 6px;
+      scrollbar-width: thin; /* Firefox */
+    }
+
+    #display::-webkit-scrollbar{ height: 10px; }
+    #display::-webkit-scrollbar-thumb{
+      background: rgba(255,255,255,.12);
+      border-radius: 999px;
+    }
+
+    .row{display:flex;gap:14px;flex-wrap:wrap;align-items:baseline}
+
+    /* Message polish (centered, styled on end) */
+    .msg{
+      min-height:26px;
+      margin-top:10px;
+      color:var(--muted);
+      text-align:center;
+      font-weight:800;
+      letter-spacing:.02em;
+    }
+    .msg.win{color:var(--accent)}
+    .msg.lose{color:var(--danger)}
+    .msg.end{
+      font-size:22px;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background: rgba(2,6,23,.28);
+    }
+    .msg.end.win{
+      border-color: rgba(34,197,94,.45);
+      background: rgba(34,197,94,.10);
+    }
+    .msg.end.lose{
+      border-color: rgba(239,68,68,.45);
+      background: rgba(239,68,68,.10);
+    }
+
+    .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
+    input{
+      width:78px;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(2,6,23,.35);
+      color:var(--text);
+      font-size:18px;
+      text-align:center;
+      outline:none;
+    }
+    input:focus{border-color:rgba(34,197,94,.6)}
+    button{
+      padding:10px 14px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.08);
+      color:var(--text);
+      cursor:pointer;
+      font-weight:650;
+    }
+    button:hover{background:rgba(255,255,255,.14)}
+    button.secondary{opacity:.92}
+
+    /* On-screen keyboard */
+    .keyboard{
+      display:grid;
+      grid-template-columns: repeat(13, minmax(0, 1fr));
+      gap:8px;
+      margin-top:10px;
+    }
+    @media (max-width: 720px){
+      .keyboard{ grid-template-columns: repeat(9, minmax(0, 1fr)); }
+    }
+    @media (max-width: 420px){
+      .keyboard{ grid-template-columns: repeat(7, minmax(0, 1fr)); }
+    }
+    .keybtn{
+      padding:10px 0;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.08);
+      color:var(--text);
+      cursor:pointer;
+      font-weight:800;
+      text-transform:uppercase;
+      user-select:none;
+    }
+    .keybtn:hover{ background:rgba(255,255,255,.14); }
+    .keybtn:disabled{
+      cursor:not-allowed;
+      opacity:.45;
+      background:rgba(255,255,255,.06);
+    }
+    .keybtn.good{
+      border-color: rgba(34,197,94,.55);
+      background: rgba(34,197,94,.12);
+    }
+    .keybtn.bad{
+      border-color: rgba(239,68,68,.55);
+      background: rgba(239,68,68,.12);
+    }
+
+    pre{
+      margin:0;
+      white-space:pre;
+      overflow:auto;
+      padding:12px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(2,6,23,.35);
+      min-height: 230px;
+    }
+    .hint{font-size:12px;color:var(--muted);margin-top:8px}
+
+    .pillrow{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      margin-top:12px;
+    }
+    .pill{
+      border:1px solid var(--border);
+      border-radius:999px;
+      padding:6px 10px;
+      background:rgba(2,6,23,.28);
+      font-size:13px;
+      color:var(--text);
+    }
+    .pill strong{color:var(--muted); font-weight:700; margin-right:6px}
+
+    /* ===== Animations ===== */
+    @keyframes shake {
+      0% { transform: translateX(0); }
+      20% { transform: translateX(-8px); }
+      40% { transform: translateX(8px); }
+      60% { transform: translateX(-6px); }
+      80% { transform: translateX(6px); }
+      100% { transform: translateX(0); }
+    }
+    @keyframes pop {
+      0% { transform: scale(1); }
+      40% { transform: scale(1.06); }
+      100% { transform: scale(1); }
+    }
+    @keyframes glowGood {
+      0% { box-shadow: 0 0 0 rgba(34,197,94,0); }
+      40% { box-shadow: 0 0 24px rgba(34,197,94,.25); }
+      100% { box-shadow: 0 0 0 rgba(34,197,94,0); }
+    }
+    @keyframes glowBad {
+      0% { box-shadow: 0 0 0 rgba(239,68,68,0); }
+      40% { box-shadow: 0 0 24px rgba(239,68,68,.25); }
+      100% { box-shadow: 0 0 0 rgba(239,68,68,0); }
+    }
+    .shake { animation: shake .35s ease; }
+    .pop { animation: pop .30s ease; }
+    .glow-good { animation: glowGood .45s ease; }
+    .glow-bad { animation: glowBad .45s ease; }
+
+    /* Confetti canvas overlay */
+    #confetti{
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* ===== Logo fixes + polish ===== */
+    .card.logo .label{ margin-bottom: 10px; }
+
+    .ascii-logo{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+
+      /* ASCII must-haves */
+      letter-spacing: 0 !important;
+      white-space: pre;
+      line-height: 1.05;
+
+      /* sizing */
+      font-size: 14px;
+
+      /* layout polish */
+      display: flex;
+      align-items: center;         /* vertical centering */
+      justify-content: center;     /* horizontal centering */
+      min-height: 170px;           /* consistent “hero” feel */
+      padding: 18px 16px;
+
+      /* visual polish */
+      text-align: left;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+
+      background:
+        radial-gradient(600px 220px at 30% 20%, rgba(96,165,250,.14), rgba(2,6,23,0) 55%),
+        radial-gradient(520px 220px at 70% 60%, rgba(34,197,94,.10), rgba(2,6,23,0) 60%),
+        rgba(2,6,23,.28);
+
+      box-shadow:
+        0 10px 30px rgba(0,0,0,.25),
+        inset 0 0 0 1px rgba(255,255,255,.04);
+
+      overflow-x: auto;
+    }
+    .ascii-logo::-webkit-scrollbar{ height: 10px; }
+    .ascii-logo::-webkit-scrollbar-thumb{
+      background: rgba(255,255,255,.12);
+      border-radius: 999px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="card logo" style="flex:1 1 520px;">
+        <pre id="logo" class="ascii-logo"></pre>
+      </div>
+
+      <div class="card" style="flex:1 1 280px;">
+        <div class="label">Stats</div>
+        <div class="pillrow mono">
+          <div class="pill"><strong>Wins</strong><span id="wins">0</span></div>
+          <div class="pill"><strong>Losses</strong><span id="losses">0</span></div>
+          <div class="pill"><strong>Streak</strong><span id="streak">0</span></div>
+          <div class="pill"><strong>Best</strong><span id="bestStreak">0</span></div>
+          <div class="pill"><strong>Remaining</strong><span id="remaining">26</span></div>
+        </div>
+
+        <div class="controls" style="margin-top:12px;">
+          <button type="button" id="hintBtn">Hint (-1 life)</button>
+          <button type="button" id="resetStatsBtn" class="secondary">Reset stats</button>
+        </div>
+
+        <div class="hint">
+          Hint reveals one unrevealed letter and costs 1 life.
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <!-- Left: Game info + input -->
+      <div class="card" id="gameCard">
+        <div class="row">
+          <div>
+            <div class="label">Lives</div>
+            <div class="big" id="lives">6</div>
+          </div>
+          <div>
+            <div class="label">Guessed</div>
+            <div class="mono" id="guessed">—</div>
+          </div>
+        </div>
+
+        <div style="margin-top:16px;">
+          <div class="label">Word to guess</div>
+          <div class="big mono" id="display">_ _ _ _</div>
+        </div>
+
+        <div id="message" class="msg"></div>
+
+        <form id="guessForm" class="controls" autocomplete="off">
+          <input id="guessInput" maxlength="1" placeholder="a" aria-label="Guess a letter" />
+          <button type="submit">Guess</button>
+          <button type="button" id="restartBtn" class="secondary">Restart</button>
+        </form>
+
+        <div style="margin-top:14px;">
+          <div class="label">Keyboard</div>
+          <div id="keyboard" class="keyboard"></div>
+        </div>
+
+        <div class="hint">
+          Tip: type a letter and press Enter, or click the on-screen keyboard.
+        </div>
+      </div>
+
+      <!-- Right: Hangman art -->
+      <div class="card">
+        <div class="label">Hangman</div>
+        <pre id="art" class="mono"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confetti overlay -->
+  <canvas id="confetti"></canvas>
+
+  <script>
+    // -----------------------
+    // ASCII logo
+    // -----------------------
+    const logo = String.raw`
+ _                                             
+| |                                            
+| |__   __ _ _ __   __ _ _ __ ___   __ _ _ __  
+| '_ \ / _\ | '_ \ / _\ | '_ \ _ \ / _\ | '_ \ 
+| | | | (_| | | | | (_| | | | | | | (_| | | | |
+|_| |_|\__,_|_| |_|\__, |_| |_| |_|\__,_|_| |_|
+                    __/ |                      
+                   |___/    
+`;
+
+    // -----------------------
+    // Your word list
+    // -----------------------
+    const word_list_raw = [
+      'adore','affair','affection','affinity','align','appeal','attach','attract',
+      'availability','balance','banter','believe','belong','bonded','bonding','boost',
+      'capture','careful','caring','charm','chemistry','choice','click','close','closer',
+      'commit','comfort','compat','connect','contact','consent','conversation','courting',
+      'crush','curious','dating','desire','devote','devoted','devotion','disclose','distance',
+      'dream','effort','embrace','emotion','empathy','energy','engage','encounter','exchange',
+      'excited','expect','familiar','feeling','feedback','fidelity','filter','flirt','focus',
+      'follow','fondness','forever','gesture','genuine','giving','heartbeat','heartful',
+      'honest','hope','hopeful','identity','interest','intimate','invite','kindly','kindness',
+      'language','laughter','listen','listening','longing','loving','loyalty','magnet','magnetic',
+      'match','tinder','meetup','message','mindful','moment','mutual','nurture','opener','openly',
+      'openness','pairing','partner','passion','patience','presence','profile','promise','rapport',
+      'reciprocal','respect','response','romance','romantic','secure','security','seeking',
+      'sentiment','sharing','signal','sincere','single','smiles','spark','sparked','stability',
+      'steady','subtle','support','sweet','tender','timing','together','touching','trust',
+      'understand','valuable','values','vibe','vulnerable','warmth','welcome','whisper',
+      'willing','wink','worthy','yearning','active','browse','chat','connects','discover',
+      'emoji','filters','highlight','insight','likeable','location','matchup','notify',
+      'profiled','prompt','reaction','reply','scroll','selector','signalize','swipe','tap',
+      'update','verify','chispa','upward','archer','hinge','azar','swipe'
+    ];
+
+    // Normalize + letters-only + dedupe
+    const word_list = [...new Set(
+      word_list_raw
+        .map(w => String(w).trim().toLowerCase())
+        .filter(w => /^[a-z]+$/.test(w))
+    )];
+
+    // -----------------------
+    // ASCII stages indexed by lives: stages[lives]
+    // -----------------------
+    const stages = [
+String.raw`
+  +---+
+  |   |
+  O   |
+ /|\  |
+ / \  |
+      |
+=========
+`,
+String.raw`
+  +---+
+  |   |
+  O   |
+ /|\  |
+ /    |
+      |
+=========
+`,
+String.raw`
+  +---+
+  |   |
+  O   |
+ /|\  |
+      |
+      |
+=========
+`,
+String.raw`
+  +---+
+  |   |
+  O   |
+ /|   |
+      |
+      |
+=========
+`,
+String.raw`
+  +---+
+  |   |
+  O   |
+  |   |
+      |
+      |
+=========
+`,
+String.raw`
+  +---+
+  |   |
+  O   |
+      |
+      |
+      |
+=========
+`,
+String.raw`
+  +---+
+  |   |
+      |
+      |
+      |
+      |
+=========
+`
+    ];
+
+    // -----------------------
+    // Game + stats state
+    // -----------------------
+    let chosen_word = "";
+    let lives = 6;
+    let correct_letters = new Set();
+    let guessed_letters = new Set();
+    let game_over = false;
+
+    // prevents double-counting outcomes
+    let outcome_recorded = false;
+
+    // Confetti state
+    let confettiFired = false;
+
+    // localStorage stats
+    const STATS_KEY = "hangman_stats_v1";
+    let stats = { wins: 0, losses: 0, streak: 0, bestStreak: 0 };
+
+    // -----------------------
+    // DOM
+    // -----------------------
+    const logoEl = document.getElementById("logo");
+    const livesEl = document.getElementById("lives");
+    const guessedEl = document.getElementById("guessed");
+    const displayEl = document.getElementById("display");
+    const messageEl = document.getElementById("message");
+    const artEl = document.getElementById("art");
+    const keyboardEl = document.getElementById("keyboard");
+    const gameCard = document.getElementById("gameCard");
+    const guessForm = document.getElementById("guessForm");
+    const guessInput = document.getElementById("guessInput");
+    const restartBtn = document.getElementById("restartBtn");
+
+    const winsEl = document.getElementById("wins");
+    const lossesEl = document.getElementById("losses");
+    const streakEl = document.getElementById("streak");
+    const bestStreakEl = document.getElementById("bestStreak");
+    const remainingEl = document.getElementById("remaining");
+
+    const hintBtn = document.getElementById("hintBtn");
+    const resetStatsBtn = document.getElementById("resetStatsBtn");
+
+    const confettiCanvas = document.getElementById("confetti");
+
+    logoEl.textContent = logo;
+
+    // -----------------------
+    // Restart CSS animations reliably
+    // -----------------------
+    function nudgeClass(el, cls){
+      if (!el) return;
+      el.classList.remove(cls);
+      void el.offsetWidth; // force reflow
+      el.classList.add(cls);
+      setTimeout(() => el.classList.remove(cls), 600);
+    }
+
+    // -----------------------
+    // Stats helpers
+    // -----------------------
+    function load_stats(){
+      try{
+        const raw = localStorage.getItem(STATS_KEY);
+        if(raw){
+          const parsed = JSON.parse(raw);
+          stats = {
+            wins: Number(parsed.wins) || 0,
+            losses: Number(parsed.losses) || 0,
+            streak: Number(parsed.streak) || 0,
+            bestStreak: Number(parsed.bestStreak) || 0
+          };
+        }
+      }catch(_){}
+      render_stats();
+    }
+
+    function save_stats(){
+      localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+    }
+
+    function render_stats(){
+      winsEl.textContent = stats.wins;
+      lossesEl.textContent = stats.losses;
+      streakEl.textContent = stats.streak;
+      bestStreakEl.textContent = stats.bestStreak;
+    }
+
+    function record_outcome(win){
+      if(outcome_recorded) return;
+      outcome_recorded = true;
+
+      if(win){
+        stats.wins += 1;
+        stats.streak += 1;
+        if(stats.streak > stats.bestStreak) stats.bestStreak = stats.streak;
+      }else{
+        stats.losses += 1;
+        stats.streak = 0;
+      }
+      save_stats();
+      render_stats();
+    }
+
+    // -----------------------
+    // Confetti Engine (no libraries)
+    // -----------------------
+    let confettiCtx = null;
+    let confettiW = 0, confettiH = 0;
+    let confettiParticles = [];
+    let confettiAnimating = false;
+
+    function resizeConfetti(){
+      confettiW = confettiCanvas.width = window.innerWidth;
+      confettiH = confettiCanvas.height = window.innerHeight;
+      confettiCtx = confettiCanvas.getContext("2d");
+    }
+    window.addEventListener("resize", resizeConfetti);
+
+    function rand(min, max){ return Math.random() * (max - min) + min; }
+
+    function fireConfetti(durationMs = 1600, count = 200){
+      if (!confettiCtx) resizeConfetti();
+      const colors = ["#22c55e","#60a5fa","#f59e0b","#ef4444","#a78bfa","#10b981","#eab308","#fb7185"];
+
+      const originX = confettiW * 0.5;
+      const originY = confettiH * 0.18;
+
+      for (let i = 0; i < count; i++){
+        confettiParticles.push({
+          x: originX + rand(-140, 140),
+          y: originY + rand(-50, 50),
+          vx: rand(-6, 6),
+          vy: rand(-10, -2),
+          g: rand(0.25, 0.45),
+          size: rand(4, 9),
+          rot: rand(0, Math.PI * 2),
+          vr: rand(-0.2, 0.2),
+          color: colors[(Math.random() * colors.length) | 0],
+          life: rand(0.9, 1.4)
+        });
+      }
+
+      if (!confettiAnimating){
+        confettiAnimating = true;
+        const start = performance.now();
+        const end = start + durationMs;
+
+        (function tick(now){
+          confettiCtx.clearRect(0, 0, confettiW, confettiH);
+
+          confettiParticles = confettiParticles.filter(p => p.life > 0 && p.y < confettiH + 40);
+
+          for (const p of confettiParticles){
+            p.vy += p.g;
+            p.x += p.vx;
+            p.y += p.vy;
+            p.rot += p.vr;
+            p.life -= 0.012;
+
+            confettiCtx.save();
+            confettiCtx.translate(p.x, p.y);
+            confettiCtx.rotate(p.rot);
+            confettiCtx.globalAlpha = Math.max(0, p.life);
+            confettiCtx.fillStyle = p.color;
+            confettiCtx.fillRect(-p.size/2, -p.size/2, p.size, p.size*0.7);
+            confettiCtx.restore();
+          }
+
+          if (now < end || confettiParticles.length){
+            requestAnimationFrame(tick);
+          } else {
+            confettiCtx.clearRect(0, 0, confettiW, confettiH);
+            confettiAnimating = false;
+          }
+        })(start);
+      }
+    }
+
+    // -----------------------
+    // Game helpers
+    // -----------------------
+    function pick_word() {
+      chosen_word = word_list[Math.floor(Math.random() * word_list.length)];
+    }
+
+    function build_display() {
+      let display = "";
+      for (const letter of chosen_word) {
+        display += correct_letters.has(letter) ? letter : "_";
+      }
+      return display;
+    }
+
+    function fitDisplayToContainer(){
+      // Reset to default size first (so it can grow back on short words)
+      displayEl.style.fontSize = "";
+
+      // The display sits inside a parent container — use that width as the target
+      const container = displayEl.parentElement; // the div that contains "Word to guess" + display
+      if (!container) return;
+
+      const maxWidth = container.clientWidth;
+      const paddingBuffer = 24; // keep some breathing room
+      const limit = Math.max(120, maxWidth - paddingBuffer);
+
+      // Start from computed font size
+      let size = parseFloat(getComputedStyle(displayEl).fontSize);
+ 
+      // Shrink until it fits or we hit a minimum
+      while (displayEl.scrollWidth > limit && size > 16) {
+        size -= 1;
+        displayEl.style.fontSize = size + "px";
+      }
+    }
+
+    function remaining_letters_count(){
+      return 26 - guessed_letters.size;
+    }
+
+    // -----------------------
+    // Keyboard
+    // -----------------------
+    function build_keyboard() {
+      keyboardEl.innerHTML = "";
+      const letters = "abcdefghijklmnopqrstuvwxyz".split("");
+
+      for (const letter of letters) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "keybtn";
+        btn.textContent = letter;
+        btn.dataset.letter = letter;
+
+        btn.addEventListener("click", () => {
+          handle_guess(letter);
+          guessInput.focus();
+        });
+
+        keyboardEl.appendChild(btn);
+      }
+
+      sync_keyboard();
+    }
+
+    function sync_keyboard() {
+      const buttons = keyboardEl.querySelectorAll("button.keybtn");
+      buttons.forEach(btn => {
+        const letter = btn.dataset.letter;
+        btn.disabled = game_over || guessed_letters.has(letter);
+
+        btn.classList.remove("good", "bad");
+        if (guessed_letters.has(letter)) {
+          if (chosen_word.includes(letter)) btn.classList.add("good");
+          else btn.classList.add("bad");
+        }
+      });
+
+      remainingEl.textContent = remaining_letters_count();
+
+      // hint button enable rules
+      const display = build_display();
+      const unrevealed = chosen_word.split("").filter(ch => !correct_letters.has(ch));
+      hintBtn.disabled = game_over || lives <= 0 || !display.includes("_") || unrevealed.length === 0;
+    }
+
+    // -----------------------
+    // Render
+    // -----------------------
+    function render(message = "", kind = "") {
+      livesEl.textContent = lives;
+
+      const guessedArr = Array.from(guessed_letters).sort();
+      guessedEl.textContent = guessedArr.length ? guessedArr.join(", ") : "—";
+
+      const display = build_display();
+      displayEl.textContent = display.split("").join(" ");
+      fitDisplayToContainer();
+
+      artEl.textContent = stages[lives];
+
+      // Always reset class first so "end" never sticks
+      messageEl.textContent = message;
+      messageEl.className = "msg";
+      messageEl.className = "msg" + (kind ? " " + kind : "");
+
+      // Win check
+      if (!game_over && !display.includes("_")) {
+        game_over = true;
+        messageEl.textContent = "YOU WIN 🎉";
+        messageEl.className = "msg end win";
+        record_outcome(true);
+
+        if (!confettiFired){
+          confettiFired = true;
+          fireConfetti(1700, 230);
+        }
+      }
+
+      // Lose check
+      if (!game_over && lives === 0) {
+        game_over = true;
+        messageEl.textContent = `YOU LOSE 💀 (It was "${chosen_word}")`;
+        messageEl.className = "msg end lose";
+        record_outcome(false);
+      }
+
+      sync_keyboard();
+    }
+
+    // -----------------------
+    // Main actions
+    // -----------------------
+    function reset_game() {
+      lives = 6;
+      correct_letters = new Set();
+      guessed_letters = new Set();
+      game_over = false;
+      outcome_recorded = false;
+      confettiFired = false;
+
+      // ✅ Blank message on reset + remove end styling
+      messageEl.textContent = "";
+      messageEl.className = "msg";
+
+      if (word_list.length === 0) {
+        chosen_word = "";
+        messageEl.textContent = "Word list is empty after cleanup.";
+        messageEl.className = "msg end lose";
+        return;
+      }
+
+      pick_word();
+
+      // ✅ Reset the dashed display immediately (all underscores)
+      displayEl.textContent = build_display().split("").join(" ");
+      fitDisplayToContainer();
+
+      // Reset hangman drawing and other UI elements
+      artEl.textContent = stages[lives];
+      guessedEl.textContent = "—";
+      livesEl.textContent = lives;
+
+      // Rebuild + sync keyboard (updates Remaining/Hints)
+      build_keyboard();
+      sync_keyboard();
+
+      // Reset input focus
+      guessInput.value = "";
+      guessInput.focus();
+    }
+
+    function handle_guess(raw) {
+      if (game_over) return;
+
+      const guess = (raw || "").toLowerCase();
+
+      if (!/^[a-z]$/.test(guess)) {
+        render("Please enter a single letter (a-z).");
+        return;
+      }
+
+      if (guessed_letters.has(guess)) {
+        render(`You already guessed "${guess}".`);
+        return;
+      }
+
+      guessed_letters.add(guess);
+
+      if (chosen_word.includes(guess)) {
+        correct_letters.add(guess);
+        nudgeClass(gameCard, "pop");
+        nudgeClass(gameCard, "glow-good");
+        render(`Nice! "${guess}" is in the word.`, "win");
+      } else {
+        lives -= 1;
+        nudgeClass(gameCard, "shake");
+        nudgeClass(gameCard, "glow-bad");
+        render(`"${guess}" is not in the word. You lose a life.`, "lose");
+      }
+    }
+
+    function use_hint(){
+      if (game_over || lives <= 0) return;
+
+      const candidates = Array.from(new Set(
+        chosen_word.split("").filter(ch => !correct_letters.has(ch))
+      ));
+
+      if (candidates.length === 0) {
+        render("No hint available — word is already revealed.");
+        return;
+      }
+
+      const pick = candidates[Math.floor(Math.random() * candidates.length)];
+      correct_letters.add(pick);
+      guessed_letters.add(pick);
+      lives -= 1;
+
+      nudgeClass(gameCard, "pop");
+      nudgeClass(gameCard, "glow-good");
+      render(`Hint: revealed "${pick}" (-1 life).`, "win");
+    }
+
+    function reset_stats(){
+      stats = { wins: 0, losses: 0, streak: 0, bestStreak: 0 };
+      save_stats();
+      render_stats();
+      render("Stats reset.");
+    }
+
+    // -----------------------
+    // Events
+    // -----------------------
+    guessForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const val = guessInput.value.trim();
+      guessInput.value = "";
+      if (val) handle_guess(val[0]);
+      guessInput.focus();
+    });
+
+    window.addEventListener("resize", fitDisplayToContainer);
+    restartBtn.addEventListener("click", reset_game);
+    hintBtn.addEventListener("click", use_hint);
+    resetStatsBtn.addEventListener("click", reset_stats);
+
+    // Optional: physical keyboard support (works when input is NOT focused)
+    document.addEventListener("keydown", (e) => {
+      if (game_over) return;
+      if (document.activeElement === guessInput) return;
+      const k = e.key.toLowerCase();
+      if (/^[a-z]$/.test(k)) handle_guess(k);
+    });
+
+    // -----------------------
+    // Start
+    // -----------------------
+    load_stats();
+    reset_game();
+  </script>
+</body>
+</html>
